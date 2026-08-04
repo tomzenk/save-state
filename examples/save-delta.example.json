@@ -1,0 +1,64 @@
+{
+  "expected_revision": 12,
+  "session_summary": "validated ancestry weighting",
+  "handoff": {
+    "last_session": [
+      "Completed PH-007 by correcting multiplier order.",
+      "All focused and regression tests pass."
+    ],
+    "resume_point": {
+      "action": "Review the completed phase and decide whether to activate caching",
+      "location": ".savestate/stages/STG-002-ranking/phases/PH-007-ancestry-weighting.md",
+      "start_with": "python3 .claude/skills/save-state/scripts/state.py phase PH-007",
+      "expected": "an evidence-backed completed phase record",
+      "verify": "python3 .claude/skills/save-state/scripts/state.py doctor"
+    }
+  },
+  "handoff_ops": [
+    {
+      "op": "complete_target",
+      "id": "ACT-031",
+      "result": "17 focused tests pass"
+    },
+    {
+      "op": "complete_target",
+      "id": "ACT-032",
+      "result": "full regression suite passes"
+    }
+  ],
+  "goal_ops": [
+    {
+      "op": "complete_phase",
+      "id": "PH-007",
+      "outcome": "Ancestry weighting validated through four levels",
+      "evidence": [
+        "17 focused tests pass",
+        "full regression suite passes"
+      ],
+      "lesson": "Apply distance decay before popularity normalization."
+    }
+  ],
+  "accomplished": [
+    {
+      "what": "Corrected multiplier ordering",
+      "how": "Moved distance decay before popularity normalization",
+      "evidence": "17 focused tests pass",
+      "phase": "PH-007",
+      "files": [
+        "src/ranking/ancestry.py",
+        "tests/test_ancestry.py"
+      ]
+    }
+  ],
+  "technical": {
+    "summary": "Ancestry weighting passes through four levels.",
+    "files": [
+      "src/ranking/ancestry.py",
+      "tests/test_ancestry.py"
+    ],
+    "tests": [
+      "17 focused tests pass",
+      "full regression suite passes"
+    ]
+  }
+}
