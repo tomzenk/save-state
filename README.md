@@ -1,4 +1,4 @@
-# SaveState v3.4 for Claude Code
+# SaveState v3.5 for Claude Code
 
 SaveState is a transactional, human-readable project continuity system for Claude Code.
 

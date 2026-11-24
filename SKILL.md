@@ -41,7 +41,7 @@ cat <<'JSON' | $SS apply --root "$PROJECT_ROOT" --session-id "${CLAUDE_SESSION_I
 JSON
 ```
 
-`save-prep` returns `expected_revision`, a prefilled `delta_skeleton`, the previous handoff, active stage and phase summaries, open target IDs, pending note IDs, Git context, and warnings. If `session_warnings` reports an empty session ID, decide the boundary yourself: pass `"boundary": "new"` on your first save of this conversation and `"same"` afterward; never let a conversation end unarchived because the ID was unavailable.
+`save-prep` returns `expected_revision`, a prefilled `delta_skeleton`, the previous handoff, active stage and phase summaries, `open_target_ids` (bare IDs for `complete_target`) with `open_targets` (ID and text), pending note IDs, Git context, and warnings. When only the revision is needed, `$SS revision` is the cheap lookup. If `session_warnings` reports an empty session ID, decide the boundary yourself: pass `"boundary": "new"` on your first save of this conversation and `"same"` afterward; never let a conversation end unarchived because the ID was unavailable.
 
 Reconcile before writing: `CURRENT.md` is an advancing working note, so every prior item ends up carried forward, progressed, completed, blocked, superseded, or resolved. Never silently drop an unreached target, an unresolved blocker, a live warning, or a still-correct resume point. Omitted fields are preserved automatically; resolve or replace things explicitly. Verify evidence (branch, diff, tests, observed results) before claiming completion.
 
@@ -78,6 +78,7 @@ The engine applies transactionally: an independent conservation auditor rejects 
 
 - Exact lightweight note (no full save): `printf '%s' "wording" | $SS note --root "$PROJECT_ROOT" --session-id "${CLAUDE_SESSION_ID}"` (stdin form; `--text` fails on dash-leading wording)
 - Retrieval, always targeted: `$SS vision --tags x`, `$SS phase PH-000`, `$SS find --id/--file/--tag/--text ...`, `$SS history [--journal]`
+- Current revision only: `$SS revision`
 - Health and recovery: `$SS doctor [--repair]`; run it whenever an apply fails twice
 - `checkpoint` freezes a snapshot; `closeout` archives the cycle and opens a new one
 

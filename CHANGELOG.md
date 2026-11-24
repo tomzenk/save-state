@@ -1,5 +1,26 @@
 # Changelog
 
+## 3.5.0
+
+Friction fixes found in real use (a nine-stage data pipeline build, about
+twenty saves in one conversation with no session ID in the shell):
+
+- `save-prep` now returns `open_target_ids` as bare `ACT-###` strings, so
+  they feed `complete_target` directly. The `{id, text}` objects moved to a
+  new `open_targets` field. Previously the objects sat under the `_ids` name
+  and passing one to `complete_target` failed with "Unknown action target".
+- Added `state.py revision`, which prints the current revision without the
+  full `save-prep` payload. A stale-delta rejection now names the usual
+  causes (a note, checkpoint, `doctor --repair`, or another session's save)
+  and points at the new command.
+- The first save after `init` no longer opens a second cycle. A cycle that
+  has had no saves yet is reused when a delta asks for `boundary: new`
+  (with a warning), and `save-prep` recommends `same` for it. Metadata now
+  tracks `cycle_applies`; states from before 3.5 lack it and keep the old
+  behavior.
+- `doctor` warns about commit hashes recorded on phases that no longer exist
+  in the repository, which happens after a history rewrite.
+
 ## 3.4.0
 
 Refinements from a full project simulation (a solo Reddit-scale build run

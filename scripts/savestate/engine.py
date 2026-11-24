@@ -99,6 +99,7 @@ def open_cycle(data: dict, session_id: str, label: str = "") -> str:
     data["metadata"]["active_cycle_id"] = cycle_id
     data["metadata"]["active_claude_session_id"] = session_id
     data["metadata"]["cycle_started_at"] = iso_now()
+    data["metadata"]["cycle_applies"] = 0
     add_event(
         data,
         "cycle",
@@ -106,6 +107,14 @@ def open_cycle(data: dict, session_id: str, label: str = "") -> str:
         related=[cycle_id],
     )
     return cycle_id
+
+
+def cycle_is_fresh(data: dict) -> bool:
+    """True when the active cycle was opened (by init or a boundary) and no
+    save has landed in it yet. States from before v3.5 lack the counter and
+    are never treated as fresh."""
+    meta = data["metadata"]
+    return bool(meta.get("active_cycle_id")) and meta.get("cycle_applies") == 0
 
 
 def detect_boundary(data: dict, session_id: str, requested: str = "auto") -> str:
@@ -853,6 +862,7 @@ def apply_delta(data: dict, delta: dict, session_id: str) -> list[str]:
         rotate_hot_fields(data["current"])
     elif session_id and not meta.get("active_claude_session_id"):
         meta["active_claude_session_id"] = session_id
+    meta["cycle_applies"] = int(meta.get("cycle_applies", 0)) + 1
 
     if "handoff" in delta:
         if not isinstance(delta["handoff"], dict):
@@ -1050,6 +1060,9 @@ def prepare_save(store: Store, session_id: str, full: bool = False) -> dict:
             "Claude session ID is empty, so automatic session-boundary detection is "
             "disabled. On the first save of this conversation pass boundary=new; "
             "on later saves in the same conversation pass boundary=same."
+            + (" The active cycle has no saves yet (just opened by init), so "
+               "boundary=new would reuse it rather than open a second one."
+               if cycle_is_fresh(data) else "")
         )
     revision = data["metadata"].get("revision", 0)
     stage = item_by_id(data["stages"]["items"], data["current"].get("active_stage", ""))
@@ -1066,12 +1079,13 @@ def prepare_save(store: Store, session_id: str, full: bool = False) -> dict:
         "expected_revision": revision,
         "active_cycle_id": data["metadata"].get("active_cycle_id", ""),
         "active_session_id": data["metadata"].get("active_claude_session_id", ""),
-        "boundary": detect_boundary(data, session_id, "auto"),
+        "boundary": "same" if cycle_is_fresh(data) else detect_boundary(data, session_id, "auto"),
         "session_id": session_id,
         "current": data["current"],
         "active_stage": _stage_summary(stage) if not full else stage,
         "active_phase": _phase_summary(phase) if not full else phase,
-        "open_target_ids": open_targets,
+        "open_target_ids": [t["id"] for t in open_targets],
+        "open_targets": open_targets,
         "pending_note_ids": [i.get("id") for i in pending],
         "pending_notes": pending,
         "repository": git_context(store.project_root),

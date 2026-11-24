@@ -16,6 +16,7 @@ from .engine import (
     alloc,
     apply_delta,
     budget_report,
+    cycle_is_fresh,
     detect_boundary,
     finalize_save,
     item_by_id,
@@ -27,7 +28,7 @@ from .engine import (
     write_journal_entry,
 )
 from .invariants import audit
-from .gitutils import ensure_gitignore, state_only_commit
+from .gitutils import ensure_gitignore, is_repo, state_only_commit
 from .render import (
     build_index,
     render_all,
@@ -43,7 +44,7 @@ from .store import (
     restore_backup,
     transaction_store,
 )
-from .util import deep_copy, file_tree, find_project_root, iso_now, json_text, read_json, write_json, write_text
+from .util import deep_copy, file_tree, find_project_root, iso_now, json_text, read_json, run, write_json, write_text
 
 
 def emit(value: Any, as_json: bool = True) -> None:
@@ -197,6 +198,21 @@ def cmd_save_prep(args) -> int:
     return 0
 
 
+def cmd_revision(args) -> int:
+    store = resolve_store(args.root)
+    if not store.exists:
+        emit({"initialized": False, "revision": 0})
+        return 0
+    meta = store.load_all()["metadata"]
+    emit({
+        "initialized": True,
+        "revision": meta.get("revision", 0),
+        "active_cycle_id": meta.get("active_cycle_id", ""),
+        "last_saved_at": meta.get("last_saved_at", ""),
+    })
+    return 0
+
+
 def cmd_apply(args) -> int:
     live = resolve_store(args.root)
     delta = load_delta(args.source)
@@ -209,7 +225,9 @@ def cmd_apply(args) -> int:
         raise SaveStateError("Delta requires expected_revision from save-prep")
     if int(expected) != live_revision:
         raise SaveStateError(
-            f"Stale delta: expected revision {expected}, current revision is {live_revision}. Run save-prep again."
+            f"Stale delta: expected revision {expected}, current revision is {live_revision}. "
+            "A note, checkpoint, doctor --repair, or another session's save advanced it. "
+            "Run save-prep again, or `state.py revision` for the number alone."
         )
 
     with StateLock(live.project_root):
@@ -225,10 +243,18 @@ def cmd_apply(args) -> int:
         with transaction_store(live.project_root) as (temp, _):
             data = temp.load_all()
             audit_before = deep_copy(data)
+            reused_fresh_cycle = delta.get("boundary") == "new" and cycle_is_fresh(data)
+            if reused_fresh_cycle:
+                delta = {**delta, "boundary": "same"}
             boundary = detect_boundary(data, session_id, delta.get("boundary", "auto"))
             if boundary == "new" and data["metadata"].get("active_cycle_id"):
                 archive = snapshot_bundle(temp, data, "session-boundary", str(delta.get("cycle_label") or ""))
             semantic_warnings = apply_delta(data, delta, session_id)
+            if reused_fresh_cycle:
+                semantic_warnings.append(
+                    "boundary=new was requested, but the active cycle had no saves yet "
+                    "(opened by init), so this save went into it instead of opening another."
+                )
             if not session_id and delta.get("boundary", "auto") == "auto":
                 semantic_warnings.append(
                     "Claude session ID was empty and boundary=auto resolved to the "
@@ -511,6 +537,18 @@ def orphan_report(store: Store) -> tuple[list[str], list[str]]:
     return errors, warnings
 
 
+def missing_commits(root: Path, data: dict) -> list[tuple[str, str]]:
+    if not is_repo(root):
+        return []
+    missing = []
+    for phase in data["phases"]["items"]:
+        for commit in phase.get("commits", []):
+            check = run(["git", "cat-file", "-e", f"{commit}^{{commit}}"], root)
+            if check.returncode != 0:
+                missing.append((str(commit), str(phase.get("id"))))
+    return missing
+
+
 def doctor_report(store: Store) -> dict:
     orphan_errors, orphan_warnings = orphan_report(store)
     if not store.exists:
@@ -535,6 +573,12 @@ def doctor_report(store: Store) -> dict:
     warnings.extend(budget_warnings)
     if drift:
         warnings.append("Generated Markdown drift detected: " + ", ".join(drift))
+    missing = missing_commits(store.project_root, data)
+    if missing:
+        warnings.append(
+            "Recorded commits not found in the repository (history rewritten or "
+            "not yet fetched): " + ", ".join(f"{h} ({where})" for h, where in missing)
+        )
     errors.extend(orphan_errors)
     warnings.extend(orphan_warnings)
     return {
@@ -637,6 +681,9 @@ def build_parser() -> argparse.ArgumentParser:
     prep.add_argument("--session-id", default="")
     prep.add_argument("--full", action="store_true")
     prep.set_defaults(func=cmd_save_prep)
+
+    revision = command("revision")
+    revision.set_defaults(func=cmd_revision)
 
     apply_cmd = command("apply")
     apply_cmd.add_argument("source", nargs="?", default="-")
