@@ -42,7 +42,7 @@ v3.1 hardened the engine: silent no-op resolutions are rejected, blocked targets
 Clone into the project's skills directory:
 
 ```bash
-git clone https://github.com/tylerzonk/save-state.git \
+git clone https://github.com/tomzenk/save-state.git \
   <project-root>/.claude/skills/save-state
 ```
 
